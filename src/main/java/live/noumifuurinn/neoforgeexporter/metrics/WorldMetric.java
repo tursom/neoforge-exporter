@@ -1,32 +1,61 @@
 package live.noumifuurinn.neoforgeexporter.metrics;
 
-import io.prometheus.client.Collector;
+import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.MeterRegistry;
 import live.noumifuurinn.neoforgeexporter.NeoforgeExporter;
+import lombok.SneakyThrows;
 import net.minecraft.server.level.ServerLevel;
 
+import java.lang.ref.SoftReference;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
 public abstract class WorldMetric extends Metric {
-    public WorldMetric(Collector collector) {
-        super(collector);
+    private final ConcurrentMap<SoftReference<ServerLevel>, Meter> worldMeters = new ConcurrentHashMap<>();
+
+    public WorldMetric(MeterRegistry registry) {
+        super(registry);
+
+        Thread thread = Thread.ofVirtual().unstarted(this::syncWorldsTask);
+        thread.setDaemon(true);
+        thread.start();
     }
 
     @Override
-    public final void doCollect() {
-        clear();
+    public final void register() {
+        syncWorlds();
+    }
+
+    private void syncWorlds() {
+        if (!isEnabled()) {
+            return;
+        }
+
         for (ServerLevel world : NeoforgeExporter.getServer().getAllLevels()) {
-            collect(world);
+            worldMeters.computeIfAbsent(new SoftReference<>(world), ref -> this.register(world));
         }
     }
 
-    protected abstract void clear();
-    protected abstract void collect(ServerLevel world);
-/*
-    protected String getEntityName(EntityType<> type) {
-        try {
-            return type.getKey().getKey();y
-        } catch (Throwable t) {
-            // Note: The entity type key above was introduced in 1.14. Older implementations should fallback here.
-            return type.name();
+    @SuppressWarnings({"InfiniteLoopStatement", "BusyWait"})
+    @SneakyThrows
+    private void syncWorldsTask() {
+        while (true) {
+            // 十分钟同步一次世界列表
+            Thread.sleep(600_000);
+
+            // 检查是否有世界被卸载
+            worldMeters.forEach((world, meter) -> {
+                if (world.get() != null) {
+                    return;
+                }
+
+                registry.remove(meter);
+            });
+
+            // 加载新创建的新世界
+            syncWorlds();
         }
     }
-    */
+
+    protected abstract Meter register(ServerLevel world);
 }

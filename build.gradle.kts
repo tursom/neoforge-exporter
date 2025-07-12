@@ -154,6 +154,7 @@ dependencies {
   // http://www.gradle.org/docs/current/userguide/dependency_management.html
 
   val jettyVersion = "12.0.23"
+  val micrometerVersion = "1.15.1"
   val jettyExclude: ExternalModuleDependency.() -> Unit = {
     exclude(group = "org.apache.logging.log4j", module = "log4j-api")
     exclude(group = "org.apache.logging.log4j", module = "log4j-core")
@@ -163,12 +164,8 @@ dependencies {
     exclude(group = "org.slf4j", module = "slf4j-log4j12")
     exclude(group = "org.ow2.asm", module = "asm")
   }
+  shadow(libraries("io.micrometer:micrometer-registry-prometheus:$micrometerVersion", jettyExclude))
   shadow(libraries("org.eclipse.jetty:jetty-unixdomain-server:${jettyVersion}", jettyExclude))
-  shadow(libraries("org.eclipse.jetty:jetty-server:${jettyVersion}", jettyExclude))
-  shadow(libraries("io.prometheus:simpleclient_common:0.16.0", jettyExclude))
-  shadow(libraries("io.prometheus:simpleclient_hotspot:0.16.0", jettyExclude))
-  shadow(libraries("com.jayway.jsonpath:json-path:2.7.0", jettyExclude))
-  shadow(libraries("io.rest-assured:rest-assured:5.1.1", jettyExclude))
 
   // lombok
   val lombokVersion = "1.18.38"

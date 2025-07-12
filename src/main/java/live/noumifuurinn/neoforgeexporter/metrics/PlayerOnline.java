@@ -1,81 +1,98 @@
 package live.noumifuurinn.neoforgeexporter.metrics;
 
-import io.prometheus.client.Gauge;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import live.noumifuurinn.neoforgeexporter.NeoforgeExporter;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import lombok.SneakyThrows;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.players.PlayerList;
+import net.minecraft.world.entity.player.Player;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
-import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 public class PlayerOnline extends Metric {
-    public static class PlayerCacheItem {
-        private String name;
-        private String uuid;
+    private final ConcurrentMap<UUID, PlayerStatus> status = new ConcurrentHashMap<>();
 
-        public String getName() {
-            return name;
-        }
+    public PlayerOnline(MeterRegistry registry) {
+        super(registry);
 
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        public String getUuid() {
-            return uuid;
-        }
-
-        public void setUuid(String uuid) {
-            this.uuid = uuid;
-        }
-    }
-
-    private static final Gauge PLAYERS_WITH_NAMES = Gauge.build()
-            .name(prefix("player_online"))
-            .help("Online state by player name")
-            .labelNames("name", "uid")
-            .create();
-    private static final Map<UUID, String> userMap = new ConcurrentHashMap<>();
-    boolean init = false;
-
-    public PlayerOnline() {
-        super(PLAYERS_WITH_NAMES);
+        // 注册到Forge事件总线
+        NeoForge.EVENT_BUS.register(this);
     }
 
     @Override
-    protected void doCollect() {
-        if(!init) {
-            init = true;
-            for (var player : NeoforgeExporter.getServer().getProfileCache().profilesByUUID.values()) {
-                userMap.put(player.getProfile().getId(), player.getProfile().getName());
-            }
-        }
-
-        PLAYERS_WITH_NAMES.clear();
-        PlayerList list = NeoforgeExporter.getServer().getPlayerList();
-        List<ServerPlayer> newPlayers = list.getPlayers().stream().filter(p -> !userMap.containsKey(p.getUUID())).toList();
-
-        List<Map.Entry<UUID, String>> players = userMap.entrySet().stream().toList();
-        for(Map.Entry<UUID, String> entry : players) {
-            ServerPlayer player = list.getPlayer(entry.getKey());
-            if(player == null) {
-                PLAYERS_WITH_NAMES.labels(entry.getValue(), entry.getKey().toString()).set(0);
-            } else {
-                String name = player.getGameProfile().getName();
-                PLAYERS_WITH_NAMES.labels(name, entry.getKey().toString()).set(1);
-                userMap.put(entry.getKey(), name);
-            }
-        }
-
-        for(ServerPlayer player : newPlayers) {
-            String name = player.getGameProfile().getName();
-
-            PLAYERS_WITH_NAMES.labels(name, player.getUUID().toString()).set(1);
-            userMap.put(player.getUUID(), name);
+    public void register() {
+        for (ServerPlayer player : NeoforgeExporter.getServer().getPlayerList().getPlayers()) {
+            register(player);
         }
     }
 
+    @SubscribeEvent
+    public void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
+        register(event.getEntity());
+    }
 
+    @SubscribeEvent
+    public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
+        remove(event.getEntity());
+    }
+
+    private void register(Player player) {
+        status.computeIfAbsent(
+                player.getUUID(),
+                ignore -> {
+                    PlayerStatus playerStatus = new PlayerStatus();
+                    playerStatus.gauge = Gauge.builder(prefix("player.online"), playerStatus, PlayerStatus::getState)
+                            .description("Online state by player name")
+                            .tag("name", player.getName().getString())
+                            .tag("uid", player.getUUID().toString())
+                            .register(registry);
+                    return playerStatus;
+                }
+        ).state = 1;
+    }
+
+    private void remove(Player player) {
+        UUID uuid = player.getUUID();
+        PlayerStatus playerStatus = status.get(uuid);
+        if (playerStatus == null || playerStatus.state == 0) {
+            return;
+        }
+
+        playerStatus.state = 0;
+        Thread.ofVirtual().start(() -> remove(uuid, playerStatus));
+    }
+
+    @SneakyThrows
+    private void remove(UUID uuid, PlayerStatus playerStatus) {
+        Gauge gauge = playerStatus.gauge;
+        if (gauge == null) {
+            return;
+        }
+
+        // 等待5分钟后删除指标
+        Thread.sleep(5 * 60_000);
+        if (status.remove(uuid, new PlayerStatus(0))) {
+            registry.remove(gauge);
+        }
+    }
+
+    @Data
+    @NoArgsConstructor
+    private static class PlayerStatus {
+        private double state;
+        @EqualsAndHashCode.Exclude
+        private Gauge gauge;
+
+        public PlayerStatus(double state) {
+            this.state = state;
+        }
+    }
 }

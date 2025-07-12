@@ -1,29 +1,23 @@
 package live.noumifuurinn.neoforgeexporter.metrics;
 
-import io.prometheus.client.Gauge;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.MeterRegistry;
 import net.minecraft.server.level.ServerLevel;
 
 public class LoadedChunks extends WorldMetric {
-
-    private static final Gauge LOADED_CHUNKS = Gauge.build()
-            .name(prefix("loaded_chunks_total"))
-            .help("Chunks loaded per world")
-            .labelNames("world", "mod")
-            .create();
-
-    public LoadedChunks() {
-        super(LOADED_CHUNKS);
+    public LoadedChunks(MeterRegistry registry) {
+        super(registry);
     }
 
     @Override
-    protected void clear() {
-		LOADED_CHUNKS.clear();
-    }
-
-    @Override
-    public void collect(ServerLevel world) {
+    protected Meter register(ServerLevel world) {
         String name = world.dimension().location().getPath();
         String mod = world.dimension().location().getNamespace();
-        LOADED_CHUNKS.labels(name, mod).set(world.getChunkSource().getLoadedChunksCount());
+
+        return Gauge.builder(prefix("loaded.chunks.total"), world, w -> w.getChunkSource().getLoadedChunksCount())
+                .tag("world", name)
+                .tag("mod", mod)
+                .register(registry);
     }
 }

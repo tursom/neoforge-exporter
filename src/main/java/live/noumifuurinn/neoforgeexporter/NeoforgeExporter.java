@@ -1,6 +1,7 @@
 package live.noumifuurinn.neoforgeexporter;
 
 import com.mojang.logging.LogUtils;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import lombok.SneakyThrows;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -48,6 +49,7 @@ public class NeoforgeExporter {
     // Directly reference a slf4j logger
     private static final Logger LOGGER = LogUtils.getLogger();
     private final static Map<Object, Runnable> serverTickReg = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final CompositeMeterRegistry registry = new CompositeMeterRegistry();
     private static MinecraftServer mcServer;
 
     private MetricsServer server;
@@ -119,11 +121,7 @@ public class NeoforgeExporter {
 
     @SneakyThrows
     private void startMetricsServer() {
-        String host = Config.Host.get();
-        Integer port = Config.Port.get();
-        String unixSocketPath = Config.UNIX_SOCKET_PATH.get();
-
-        server = new MetricsServer(host, port, unixSocketPath, this);
+        server = new MetricsServer(registry, this);
         server.start();
     }
 }

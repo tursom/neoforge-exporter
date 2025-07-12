@@ -18,19 +18,41 @@ import java.util.stream.Collectors;
 public class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
-    public static ModConfigSpec.ConfigValue<String> Host = BUILDER
-            .comment("地址")
-            .define("Host", "0.0.0.0");
-    public static ModConfigSpec.IntValue Port = BUILDER
-            .comment("端口")
-            .defineInRange("Port", 9225, 1, 65535);
-    public static ModConfigSpec.ConfigValue<String> UNIX_SOCKET_PATH = BUILDER
-            .comment("Unix Socket路径")
-            .define("unixSocketPath", "");
+    static {
+        try {
+            Class.forName(Prometheus.class.getName());
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event) {
+    }
+
+    public static class Prometheus {
+        static {
+            BUILDER.comment("prometheus配置").push("prometheus");
+        }
+
+        public static ModConfigSpec.ConfigValue<Boolean> ENABLED = BUILDER
+                .comment("是否启用Prometheus")
+                .define("enabled", true);
+
+        public static ModConfigSpec.ConfigValue<String> HOST = BUILDER
+                .comment("地址")
+                .define("host", "0.0.0.0");
+        public static ModConfigSpec.IntValue PORT = BUILDER
+                .comment("端口")
+                .defineInRange("port", 9225, 1, 65535);
+        public static ModConfigSpec.ConfigValue<String> UNIX_SOCKET_PATH = BUILDER
+                .comment("Unix Socket路径，建议使用 metrics.sock")
+                .define("unixSocketPath", "");
+
+        static {
+            BUILDER.pop();
+        }
     }
 }
