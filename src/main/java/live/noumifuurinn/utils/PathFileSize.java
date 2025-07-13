@@ -1,4 +1,4 @@
-package live.noumifuurinn.neoforgeexporter.utils;
+package live.noumifuurinn.utils;
 
 import lombok.SneakyThrows;
 

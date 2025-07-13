@@ -1,12 +1,14 @@
-package live.noumifuurinn.neoforgeexporter.metrics;
+package live.noumifuurinn.metrics;
 
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
-import live.noumifuurinn.neoforgeexporter.NeoforgeExporter;
+import live.noumifuurinn.NeoforgeExporter;
 import lombok.SneakyThrows;
 import net.minecraft.server.level.ServerLevel;
 
 import java.lang.ref.SoftReference;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -22,18 +24,21 @@ public abstract class WorldMetric extends Metric {
     }
 
     @Override
-    public final void register() {
-        syncWorlds();
+    public final Collection<Meter> register() {
+        return syncWorlds();
     }
 
-    private void syncWorlds() {
+    private Collection<Meter> syncWorlds() {
         if (!isEnabled()) {
-            return;
+            return meters;
         }
 
+        var meters = new ArrayList<Meter>();
         for (ServerLevel world : NeoforgeExporter.getServer().getAllLevels()) {
-            worldMeters.computeIfAbsent(new SoftReference<>(world), ref -> this.register(world));
+            var meter = worldMeters.computeIfAbsent(new SoftReference<>(world), ref -> this.register(world));
+            meters.add(meter);
         }
+        return meters;
     }
 
     @SuppressWarnings({"InfiniteLoopStatement", "BusyWait"})

@@ -1,4 +1,4 @@
-package live.noumifuurinn.neoforgeexporter.tps;
+package live.noumifuurinn.tps;
 
 import java.util.LinkedList;
 import java.util.function.Supplier;

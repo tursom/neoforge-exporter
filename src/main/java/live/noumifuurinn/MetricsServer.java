@@ -1,12 +1,16 @@
-package live.noumifuurinn.neoforgeexporter;
+package live.noumifuurinn;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
-import live.noumifuurinn.neoforgeexporter.metrics.*;
+import live.noumifuurinn.metrics.*;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import net.minecraft.util.StringUtil;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.event.config.ModConfigEvent;
+import net.neoforged.neoforge.common.ModConfigSpec;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.gzip.GzipHandler;
 import org.eclipse.jetty.unixdomain.server.UnixDomainServerConnector;
@@ -14,11 +18,37 @@ import org.eclipse.jetty.unixdomain.server.UnixDomainServerConnector;
 import java.net.InetSocketAddress;
 import java.net.UnixDomainSocketAddress;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
 
 @Slf4j
 public class MetricsServer {
+    private static final Map<ModConfigSpec.BooleanValue, Function<MeterRegistry, Metric>> MERTIC_MAP;
+
+    static {
+        MERTIC_MAP = new HashMap<>();
+
+        MERTIC_MAP.put(Config.Meters.PROCESSOR, Processor::new);
+        MERTIC_MAP.put(Config.Meters.GC, GarbageCollectorWrapper::new);
+        MERTIC_MAP.put(Config.Meters.ENTITIES, Entities::new);
+        MERTIC_MAP.put(Config.Meters.LOADED_CHUNKS, LoadedChunks::new);
+        MERTIC_MAP.put(Config.Meters.MEMORY, Memory::new);
+        MERTIC_MAP.put(Config.Meters.PLAYER_ONLINE, PlayerOnline::new);
+        MERTIC_MAP.put(Config.Meters.PLAYERS_ONLINE_TOTAL, PlayersOnlineTotal::new);
+        MERTIC_MAP.put(Config.Meters.THREADS, ThreadsWrapper::new);
+        MERTIC_MAP.put(Config.Meters.TICK_DURATION_AVERAGE, TickDurationAverageCollector::new);
+        MERTIC_MAP.put(Config.Meters.TICK_DURATION_MAX, TickDurationMaxCollector::new);
+        MERTIC_MAP.put(Config.Meters.TICK_DURATION_MEDIAN, TickDurationMedianCollector::new);
+        MERTIC_MAP.put(Config.Meters.TICK_DURATION_MIN, TickDurationMinCollector::new);
+        MERTIC_MAP.put(Config.Meters.TPS, Tps::new);
+        MERTIC_MAP.put(Config.Meters.WORLD_SIZE, WorldSize::new);
+    }
+
     private final CompositeMeterRegistry registry;
     private final NeoforgeExporter forgeExporter;
+
+    private final Map<ModConfigSpec.BooleanValue, Metric> metrics = new HashMap<>();
 
     private Server server;
 
@@ -32,21 +62,38 @@ public class MetricsServer {
             startPrometheus();
         }
 
-        new Processor(registry).enable();
-        new GarbageCollectorWrapper(registry).enable();
-        new Entities(registry).enable();
-        new LoadedChunks(registry).enable();
-        new Memory(registry).enable();
-        new PlayerOnline(registry).enable();
-        new PlayersOnlineTotal(registry).enable();
-        new ThreadsWrapper(registry).enable();
-        new TickDurationAverageCollector(registry).enable();
-        new TickDurationMaxCollector(registry).enable();
-        new TickDurationMedianCollector(registry).enable();
-        new TickDurationMinCollector(registry).enable();
-        new Tps(registry).enable();
-        new WorldSize(registry).enable();
+        reloadMeters();
+    }
 
+    @SubscribeEvent
+    public void onConfigReload(ModConfigEvent.Reloading event) {
+        if (!event.getConfig().getModId().equals(NeoforgeExporter.MODID)) {
+            return;
+        }
+
+        reloadMeters();
+    }
+
+    private void reloadMeters() {
+        MERTIC_MAP.forEach((metricConf, getter) -> {
+            Metric metric = metrics.computeIfAbsent(metricConf, ignore -> getter.apply(registry));
+            String metricPath = String.join(".", metricConf.getPath());
+            if (metricConf.get()) {
+                try {
+                    metric.enable();
+                    log.info("enable metric {}", metricPath);
+                } catch (Exception e) {
+                    log.warn("failed to enable metric {}", metricPath, e);
+                }
+            } else {
+                try {
+                    metric.disable();
+                    log.info("disable metric {}", metricPath);
+                } catch (Exception e) {
+                    log.warn("failed to disable metric {}", metricPath, e);
+                }
+            }
+        });
     }
 
     @SneakyThrows

@@ -1,4 +1,4 @@
-package live.noumifuurinn.neoforgeexporter.metrics;
+package live.noumifuurinn.metrics;
 
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.Meter;

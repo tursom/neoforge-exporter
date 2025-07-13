@@ -1,10 +1,10 @@
-package live.noumifuurinn.neoforgeexporter.metrics;
+package live.noumifuurinn.metrics;
 
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
-import live.noumifuurinn.neoforgeexporter.NeoforgeExporter;
-import live.noumifuurinn.neoforgeexporter.utils.PathFileSize;
+import live.noumifuurinn.NeoforgeExporter;
+import live.noumifuurinn.utils.PathFileSize;
 import lombok.SneakyThrows;
 import net.minecraft.server.level.ServerLevel;
 
