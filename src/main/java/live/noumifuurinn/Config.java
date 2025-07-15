@@ -1,5 +1,6 @@
 package live.noumifuurinn;
 
+import com.electronwill.nightconfig.toml.TomlFormat;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.config.ModConfigEvent;
@@ -19,6 +20,16 @@ public class Config {
             throw new RuntimeException(e);
         }
     }
+
+    public static final ModConfigSpec.ConfigValue<String> prefix = BUILDER
+            .comment("指标前缀")
+            .define("prefix", "mc.");
+
+    public static final ModConfigSpec.ConfigValue<com.electronwill.nightconfig.core.Config> tags = BUILDER
+            .comment("公共标签")
+            .define("tags",
+                    () -> com.electronwill.nightconfig.core.Config.of(TomlFormat.instance()),
+                    value -> true);
 
     public static final ModConfigSpec SPEC = BUILDER.build();
 
@@ -73,9 +84,9 @@ public class Config {
         public static final ModConfigSpec.BooleanValue PLAYER_ONLINE = BUILDER
                 .comment("是否启用 mc.player.online 监控")
                 .define("playerOnline", true);
-        public static final ModConfigSpec.BooleanValue PLAYERS_ONLINE_TOTAL = BUILDER
-                .comment("是否启用 mc.players.online 监控")
-                .define("playersOnline", true);
+        public static final ModConfigSpec.BooleanValue PLAYERS_WORLD = BUILDER
+                .comment("是否启用 players.world 监控")
+                .define("playersWorld", true);
         public static final ModConfigSpec.BooleanValue THREADS = BUILDER
                 .comment("是否启用 threads 监控")
                 .define("threads", true);

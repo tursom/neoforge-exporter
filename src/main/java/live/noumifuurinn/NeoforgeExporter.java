@@ -1,9 +1,13 @@
 package live.noumifuurinn;
 
 import com.mojang.logging.LogUtils;
+import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
+import io.micrometer.core.instrument.config.MeterFilter;
+import live.noumifuurinn.utils.CommonUtils;
 import lombok.SneakyThrows;
-import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.StringUtil;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
@@ -12,10 +16,8 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
-
-import java.util.Map;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(NeoforgeExporter.MODID)
@@ -24,10 +26,7 @@ public class NeoforgeExporter {
     public static final String MODID = "neoforge_exporter";
     // Directly reference a slf4j logger
     private static final Logger LOGGER = LogUtils.getLogger();
-    private final static Map<Object, Runnable> serverTickReg = new java.util.concurrent.ConcurrentHashMap<>();
     private static final CompositeMeterRegistry registry = new CompositeMeterRegistry();
-    private static MinecraftServer mcServer;
-
     private MetricsServer server;
 
     // The constructor for the mod class is the first code that is run when your mod is loaded.
@@ -45,8 +44,21 @@ public class NeoforgeExporter {
     // You can use SubscribeEvent and let the Event Bus discover methods to call
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        mcServer = event.getServer();
+        if (!StringUtil.isNullOrEmpty(Config.prefix.get())) {
+            registry.config().meterFilter(new MeterFilter() {
+                @Override
+                public Meter.@NotNull Id map(Meter.@NotNull Id id) {
+                    return id.withName(Config.prefix.get() + id.getName());
+                }
+            });
+        }
+        if (!Config.tags.get().isEmpty()) {
+            registry.config().commonTags(Config.tags.get().entrySet().stream()
+                    .map((entry) -> Tag.of(entry.getKey(), entry.getValue()))
+                    .toList());
+        }
 
+        CommonUtils.setServer(event.getServer());
         startMetricsServer();
     }
 
@@ -65,33 +77,11 @@ public class NeoforgeExporter {
         }
 
         // 清理服务器引用
-        mcServer = null;
-    }
-
-    @SubscribeEvent
-    public void onTick(ServerTickEvent.Pre event) {
-        for (Runnable r : serverTickReg.values()) {
-            try {
-                r.run();
-            } catch (Throwable ignore) {
-            }
-        }
-    }
-
-    public static void registerServerTickEvent(Object parent, Runnable r) {
-        serverTickReg.put(parent, r);
-    }
-
-    public static void unregisterServerTickEvent(Object parent) {
-        serverTickReg.remove(parent);
+        CommonUtils.setServer(null);
     }
 
     public Logger getLogger() {
         return LOGGER;
-    }
-
-    public static MinecraftServer getServer() {
-        return mcServer;
     }
 
     @SneakyThrows
